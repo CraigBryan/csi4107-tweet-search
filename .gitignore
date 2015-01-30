@@ -1,0 +1,7 @@
+#Java bytecode
+*.class
+
+#eclipse stuff
+Assignment1/.classpath
+Assignment1/.project
+Assignment1/.settings/**
