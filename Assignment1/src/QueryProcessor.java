@@ -34,7 +34,7 @@ public class QueryProcessor {
 	 * 
 	 * @param args
 	 */
-	public static void main(String[] args){
+	public static void go(){
 		
 		
 		try {
@@ -62,7 +62,7 @@ public class QueryProcessor {
 			ArrayList<QueryXml> queries = retrieveQueriesFromTextFile("res/test_queries.txt");
 			
 			// initialize search tools
-		    int hitsPerPage = 2;
+		    int hitsPerPage = 1000;
 		   // IndexReader reader = DirectoryReader.open(index);
 		 //   IndexSearcher searcher = new IndexSearcher(reader);
 		   // TopScoreDocCollector collector = TopScoreDocCollector.create(hitsPerPage, true);
