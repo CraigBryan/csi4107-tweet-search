@@ -5,3 +5,6 @@
 Assignment1/.classpath
 Assignment1/.project
 Assignment1/.settings/**
+Assignment1/lib/trec_eval.8.1/trec_eval
+Assignment1/res/eval_results.txt
+Assignment1/res/results.txt
