@@ -13,6 +13,7 @@ public class Assignment1Runner {
     public final String INPUT_FILE = "input_tweets.txt";
     public final String QUERIES_FILE = "test_queries.txt";
     public final String OUTPUT_FILE = "results.txt";
+    public final String VOCAB_OUTPUT_FILE = "vocabulary.txt";
     public final String RELEVANCE_FEEDBACK_FILE = "Trec_microblog11-qrels.txt";
     public final String EVALUATION_RESULT_FILE = "eval_results.txt";
     public final String TREC_ARGUMENTS = "-o";
@@ -23,7 +24,8 @@ public class Assignment1Runner {
 
     public void indexAndSearch() {
     	QueryProcessor q = new QueryProcessor(DATA_FOLDER + INPUT_FILE, 
-    										  DATA_FOLDER + QUERIES_FILE, 
+    										  DATA_FOLDER + QUERIES_FILE,
+                                              DATA_FOLDER + VOCAB_OUTPUT_FILE, 
     										  DATA_FOLDER + OUTPUT_FILE);
     	q.go();
     }

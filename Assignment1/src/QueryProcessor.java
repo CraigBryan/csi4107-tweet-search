@@ -14,10 +14,14 @@ import org.apache.lucene.document.Field.Store;
 import org.apache.lucene.document.StringField;
 import org.apache.lucene.document.TextField;
 import org.apache.lucene.index.DirectoryReader;
+import org.apache.lucene.index.Fields;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.index.IndexableField;
+import org.apache.lucene.index.MultiFields;
+import org.apache.lucene.index.Terms;
+import org.apache.lucene.index.TermsEnum;
 import org.apache.lucene.queryparser.classic.ParseException;
 import org.apache.lucene.queryparser.classic.QueryParser;
 import org.apache.lucene.search.IndexSearcher;
@@ -25,6 +29,7 @@ import org.apache.lucene.search.Query;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopScoreDocCollector;
 import org.apache.lucene.store.*;
+import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.Version;
 
 import java.util.ArrayList;
@@ -35,10 +40,12 @@ public class QueryProcessor {
 
 	// Set parameters
 	private final int NUM_HITS = 1000;
+	private final int NUM_WORDS_TO_PRINT = 100;
 
 	// Input/Output file names
 	private String inputTweetsFile;
 	private String inputQueriesFile;
+	private String vocabFile;
 	private String resultsFile;
 
 	// 
@@ -48,10 +55,12 @@ public class QueryProcessor {
 
 	
 	public QueryProcessor(String inputTweetsFile, 
-						  String inputQueriesFile, 
+						  String inputQueriesFile,
+						  String vocabFile,
 						  String resultsFile) {
 		this.inputTweetsFile = inputTweetsFile;
 		this.inputQueriesFile = inputQueriesFile;
+		this.vocabFile = vocabFile;
 		this.resultsFile = resultsFile;
 
 		analyzer = new StandardAnalyzer(Version.LUCENE_40);
@@ -59,6 +68,7 @@ public class QueryProcessor {
 
 	public void go() {
 		index = buildIndex();
+		analyzeIndex();
 		queries = processQueries();
 		getResults();
 	}
@@ -167,9 +177,9 @@ public class QueryProcessor {
 	 * @param fileName
 	 * @throws IOException
 	 */
-	private static void parseTweets(IndexWriter writer, 
-									String fileName) 
-									throws IOException {
+	private void parseTweets(IndexWriter writer, 
+							 String fileName) 
+							 throws IOException {
 
 		BufferedReader in = new BufferedReader(
 							new FileReader(
@@ -200,7 +210,7 @@ public class QueryProcessor {
 	 * @param fileName
 	 * @throws IOException 
 	 */
-	private static ArrayList<QueryXml> 
+	private ArrayList<QueryXml> 
 		retrieveQueriesFromTextFile(String fileName) throws IOException {
 		
 		ArrayList<QueryXml> queries = new ArrayList<QueryXml>();
@@ -246,5 +256,62 @@ public class QueryProcessor {
 		in.close();
 
 		return queries;
+	}
+
+	private void analyzeIndex() {
+		IndexReader reader = null;
+
+		try {
+			reader = IndexReader.open(index);
+		} catch (IOException e) {
+			System.out.println("Error during index analysis");
+			e.printStackTrace();
+		}
+
+		ArrayList<String> wordsArray = new ArrayList<String>();
+		
+		try {
+			Fields fields = MultiFields.getFields(reader);
+			Terms terms = fields.terms("tweet");
+			TermsEnum iterator =  terms.iterator(null);
+			BytesRef byteRef = null;
+	
+			
+			
+			while((byteRef = iterator.next()) != null) {
+				String term = new String(byteRef.bytes, 
+										 byteRef.offset, 
+										 byteRef.length);
+				wordsArray.add(term);
+			}
+			
+		} catch (IOException e) {
+			System.out.println("Error during index analysis");
+			e.printStackTrace();
+		}
+
+		OutputBuilder writer = new OutputBuilder(vocabFile);
+
+		writer.addRaw("Index Vocabulary Data\n\n");
+
+		int numWords = wordsArray.size();
+
+		writer.addRaw("Number of words: " + numWords + "\n\n");
+
+		writer.addRaw(NUM_WORDS_TO_PRINT 
+			+ " random words from the vocabulary:\n");
+
+		int index = 0;
+		String word = "";
+
+		for(int i = 0; i < NUM_WORDS_TO_PRINT; i++) {
+			index = (int) (Math.random() * (numWords - i));
+			word = wordsArray.remove(index);
+			
+			writer.addRaw(word);
+			writer.addRaw("\n");
+		}
+
+		writer.close();
 	}
 }

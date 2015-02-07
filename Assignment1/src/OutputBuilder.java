@@ -31,6 +31,15 @@ public class OutputBuilder {
         rank++;
     }
 
+    public void addRaw(String rawInput) {
+        try {
+            writer.write(rawInput);
+        } catch (IOException e) {
+            System.out.println("Error while writing to output file");
+            e.printStackTrace();
+        }
+    }
+
     public void resetRank() {
         rank = 1;
     }
