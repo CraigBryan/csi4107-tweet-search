@@ -39,7 +39,7 @@ public class OutputBuilder {
             e.printStackTrace();
         }
     }
-
+    
     public void resetRank() {
         rank = 1;
     }
