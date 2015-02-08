@@ -68,17 +68,17 @@ public class QueryProcessor {
 	private double irrelevantQueryCoefficient = 1.00;
 	
 	
-	 /* Indexed, tokenized, stored, Term-Vectors */
-    	public static final FieldType TYPE_STORED = new FieldType();
+	/* Indexed, tokenized, stored, Term-Vectors */
+	public static final FieldType TYPE_STORED = new FieldType();
 
-    	static {
-      	 TYPE_STORED.setIndexed(true);
-         TYPE_STORED.setTokenized(true);
-         TYPE_STORED.setStored(true);
-       	 TYPE_STORED.setStoreTermVectors(true);
-   	 TYPE_STORED.setStoreTermVectorPositions(true);
-       	 TYPE_STORED.freeze(); 	// not sure what this does
-    	}
+    static {
+		 TYPE_STORED.setIndexed(true);
+		 TYPE_STORED.setTokenized(true);
+		 TYPE_STORED.setStored(true);
+		 TYPE_STORED.setStoreTermVectors(true);
+		 TYPE_STORED.setStoreTermVectorPositions(true);
+		 TYPE_STORED.freeze(); 	// not sure what this does
+    }
 		
 	private final int RELEVANT_DOCUMENTS_CONSIDERED = 10;
 	public QueryProcessor(String inputTweetsFile, 
@@ -407,7 +407,7 @@ public class QueryProcessor {
 		String queryString = "";
 		for(String key: queryTermMap.keySet()){
 			int frequency = 0;
-			frequency = (int) Double.max(0, queryTermMap.get(key)); //I think casting as an int will round
+			frequency = (int) Math.max(0, queryTermMap.get(key)); //I think casting as an int will round
 			for(int i = 0; i < frequency; i++){
 				queryString += key + " ";
 			}			
