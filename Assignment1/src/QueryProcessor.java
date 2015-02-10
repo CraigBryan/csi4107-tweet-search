@@ -63,9 +63,9 @@ public class QueryProcessor {
 
 	private boolean useRelevanceFeedback = true;
 	
-	private double originalQueryCoefficient = 1.00;
-	private double relevantQueryCoefficient = 1.00;
-	private double irrelevantQueryCoefficient = 1.00;
+	private double originalQueryCoefficient = 1.0;
+	private double relevantQueryCoefficient = 5.5;
+	private double irrelevantQueryCoefficient = 0;
 	
 	
 	/* Indexed, tokenized, stored, Term-Vectors */

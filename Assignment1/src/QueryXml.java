@@ -1,4 +1,4 @@
 public class QueryXml {
-public String num;
-public String title;
+    public String num;
+    public String title;
 }
