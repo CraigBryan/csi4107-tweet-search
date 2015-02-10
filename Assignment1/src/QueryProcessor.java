@@ -1,28 +1,22 @@
 import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.FileReader;
-import java.io.FileWriter;
 import java.io.IOException;
-import java.io.PrintWriter;
-import java.io.Reader;
 
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.core.SimpleAnalyzer;
+import org.apache.lucene.analysis.en.EnglishAnalyzer;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.Field.Store;
 import org.apache.lucene.document.FieldType;
 import org.apache.lucene.document.StringField;
-import org.apache.lucene.document.TextField;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.Fields;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
-import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.index.MultiFields;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.index.Terms;
@@ -63,13 +57,18 @@ public class QueryProcessor {
 
 	// Lucene constructs used throughout the three steps
 	private Directory index;
-	private StandardAnalyzer analyzer;
+	private Analyzer analyzer;
 	private HashMap<String, Query> queries;
 
+	// Analyzer to use
+	public static enum AnalyzerChoice {
+		STANDARD, ENGLISH
+	}
+	
 	// Whether or not to use the relevance feedback system
 	private boolean useRelevanceFeedback;	
 
-	//Number of relevant documents used for feedback
+	//Number of relevant documents uesed for feedback
 	private final int RELEVANT_DOCUMENTS_CONSIDERED = 10;
 
 	// The coefficients used in the relevance feedback system
@@ -99,13 +98,18 @@ public class QueryProcessor {
 						  String vocabFile,
 						  String resultsFile,
 						  boolean useRelevanceFeedback,
-						  Double[] relevanceCoefficients) {
+						  Double[] relevanceCoefficients,
+						  AnalyzerChoice ac) {
 		this.inputTweetsFile = inputTweetsFile;
 		this.inputQueriesFile = inputQueriesFile;
 		this.vocabFile = vocabFile;
 		this.resultsFile = resultsFile;
 
-		analyzer = new StandardAnalyzer(Version.LUCENE_40);
+		if (ac == AnalyzerChoice.ENGLISH) {
+			analyzer = new EnglishAnalyzer(Version.LUCENE_40);
+		} else {
+			analyzer = new StandardAnalyzer(Version.LUCENE_40);
+		}
 
 		//Set any relevance feedback parameters sent from the command line
 		this.useRelevanceFeedback = useRelevanceFeedback;
@@ -480,9 +484,8 @@ public class QueryProcessor {
 	 Directory createIndex(Document d1) throws IOException {
 
 	        Directory directory = new RAMDirectory();
-	        Analyzer analyzer = new SimpleAnalyzer(Version.LUCENE_40);
-	        IndexWriterConfig iwc = new IndexWriterConfig(Version.LUCENE_40,
-	                analyzer);
+	        SimpleAnalyzer sa = new SimpleAnalyzer(Version.LUCENE_40);
+	        IndexWriterConfig iwc = new IndexWriterConfig(Version.LUCENE_40, sa);
 	        IndexWriter writer = new IndexWriter(directory, iwc);
 	        writer.addDocument(d1);
 	        writer.close();

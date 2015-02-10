@@ -24,17 +24,18 @@ public class Assignment1Runner {
     public final String TREC_ARGUMENTS = "-o";
 
     private boolean useRelevanceFeedback;
-    private static boolean noEval;
     private Double oQCoef;
     private Double rQCoef;
     private Double iQCoef;
+    private static boolean noEval;
+    private QueryProcessor.AnalyzerChoice ac;
 
     public Assignment1Runner(String[] args) {
     	parseCommandLineArguments(args);
     }
 
     // Does non-evaluation tasks (building the index, parsing queries, and
-    // searching fo results)
+    // searching for results)
     public void indexAndSearch() {
     	Double[] relevanceArray = new Double[3];
     	relevanceArray[0] = oQCoef;
@@ -45,7 +46,8 @@ public class Assignment1Runner {
                                               DATA_FOLDER + VOCAB_OUTPUT_FILE, 
     										  DATA_FOLDER + OUTPUT_FILE,
                                               useRelevanceFeedback,
-                                              relevanceArray);
+                                              relevanceArray,
+                                              ac);
     	q.go();
     }
 
@@ -162,7 +164,7 @@ public class Assignment1Runner {
         } else {
             useRelevanceFeedback = false;
         }
-
+        
         //Relevance feedback coefficients
         if(useRelevanceFeedback) {
             int index = Arrays.asList(args).indexOf("-oQCoef");
@@ -216,6 +218,13 @@ public class Assignment1Runner {
         } else {
             noEval = false;
         }
+        
+      //Analyzer options
+        if(Arrays.asList(args).contains("-e")) {
+        	ac = QueryProcessor.AnalyzerChoice.ENGLISH;
+        } else {
+        	ac = QueryProcessor.AnalyzerChoice.STANDARD;
+        }
     }
 
     // Help command line output
@@ -226,6 +235,8 @@ public class Assignment1Runner {
             "\t-r - use relevance feedback\n" +
             "\t-n - do not perform evaluation (creates " + 
             "results and vocabulary file only\n" +
+            "\t-e - use the EnglishAnalyzer rather than Lucene's " +
+            "StandardAnalyzer\n" +
             "\t-oQCoef VAL - sets the originalQueryCoefficient to val\n" +
             "\t-rQCoef VAL - sets the relevantQueryCoefficient to val\n" +
             "\t-iQCoef VAL - sets the irrelevantQueryCoefficient to val\n\n" +
