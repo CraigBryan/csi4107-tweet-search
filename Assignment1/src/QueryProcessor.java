@@ -10,6 +10,8 @@ import java.io.Reader;
 
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.core.SimpleAnalyzer;
+import org.apache.lucene.analysis.core.WhitespaceAnalyzer;
+import org.apache.lucene.analysis.miscellaneous.PerFieldAnalyzerWrapper;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
@@ -27,6 +29,7 @@ import org.apache.lucene.index.MultiFields;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.index.Terms;
 import org.apache.lucene.index.TermsEnum;
+import org.apache.lucene.queryparser.classic.MultiFieldQueryParser;
 import org.apache.lucene.queryparser.classic.ParseException;
 import org.apache.lucene.queryparser.classic.QueryParser;
 import org.apache.lucene.search.IndexSearcher;
@@ -38,8 +41,10 @@ import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.Version;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -58,29 +63,54 @@ public class QueryProcessor {
 
 	// 
 	private Directory index;
+	
+	private Directory hashtagIndex;
+	
+	
 	private StandardAnalyzer analyzer;
+	
+	// we might not need to use this
+	private WhitespaceAnalyzer whiteSpaceAnalyzer;
+	
 	private HashMap<String, Query> queries;
 
+	private boolean useHashtagScoring = true;
+	
 	private boolean useRelevanceFeedback = true;
 	
-	private double originalQueryCoefficient = 1.0;
-	private double relevantQueryCoefficient = 5.5;
-	private double irrelevantQueryCoefficient = 0;
+	private double originalQueryCoefficient = 1.00;
+	private double relevantQueryCoefficient = 5.50;
+	private double irrelevantQueryCoefficient = 0.00;
+	
+	private float hashtagScoreCoefficient = 1.00f;
 	
 	
-	/* Indexed, tokenized, stored, Term-Vectors */
-	public static final FieldType TYPE_STORED = new FieldType();
+	 /* Indexed, tokenized, stored, Term-Vectors */
+    	public static final FieldType TYPE_STORED = new FieldType();
 
-    static {
-		 TYPE_STORED.setIndexed(true);
-		 TYPE_STORED.setTokenized(true);
-		 TYPE_STORED.setStored(true);
-		 TYPE_STORED.setStoreTermVectors(true);
-		 TYPE_STORED.setStoreTermVectorPositions(true);
-		 TYPE_STORED.freeze(); 	// not sure what this does
-    }
+    	static {
+      	 TYPE_STORED.setIndexed(true);
+         TYPE_STORED.setTokenized(true);
+         TYPE_STORED.setStored(true);
+       	 TYPE_STORED.setStoreTermVectors(true);
+       	 TYPE_STORED.setStoreTermVectorPositions(true);
+       	 TYPE_STORED.freeze(); 	// not sure what this does
+    	}
+    	
+    	/* Term-Vectors */
+    	public static final FieldType TYPE_HASHTAG = new FieldType();
+
+    	static {
+    		TYPE_HASHTAG.setIndexed(true);
+    		TYPE_HASHTAG.setTokenized(true);
+    		TYPE_HASHTAG.setStored(true);
+    		TYPE_HASHTAG.setStoreTermVectors(true);
+    		TYPE_HASHTAG.setStoreTermVectorPositions(true);
+    		TYPE_HASHTAG.freeze(); 	// not sure what this does
+    		
+    	}
 		
-	private final int RELEVANT_DOCUMENTS_CONSIDERED = 10;
+	private final int RELEVANT_DOCUMENTS_CONSIDERED = 20;
 	public QueryProcessor(String inputTweetsFile, 
 						  String inputQueriesFile,
 						  String vocabFile,
@@ -91,26 +121,73 @@ public class QueryProcessor {
 		this.resultsFile = resultsFile;
 
 		analyzer = new StandardAnalyzer(Version.LUCENE_40);
+		whiteSpaceAnalyzer = new WhitespaceAnalyzer(Version.LUCENE_4_9_0);
 	}
 
 	public void go() {
 		index = buildIndex();
+		if(useHashtagScoring){
+		hashtagIndex = buildHashtagIndex();
+		}
 		analyzeIndex();
 		queries = processQueries();
 		getResults();
 	}
 
+	private Directory buildHashtagIndex() {
+		
+		Directory newHashtagIndex = new RAMDirectory();
+	
+		 
+		 //awrapper replaced analyzer in the following
+		IndexWriterConfig indexConfig = 
+			new IndexWriterConfig(Version.LUCENE_40, analyzer); // possibly use whitespace analyzer
+		
+		IndexWriter w = null;
+		
+		
+		// initialize index
+		try {
+			w = new IndexWriter(newHashtagIndex, indexConfig);
+			
+
+			// add the tweets to the Lucene index 
+			parseHashtags(w, inputTweetsFile);
+
+		} catch (IOException e) {
+			System.out.println("Error building index");
+			e.printStackTrace();
+		} finally {
+			try { w.close(); } 
+			catch (IOException | NullPointerException e) { }
+		}
+
+		return newHashtagIndex;
+	}
+
 	private Directory buildIndex() {
 		Directory tweetIndex = new RAMDirectory();
 		
-		IndexWriterConfig config = 
+		/* alternative code
+		// sets a different analyzer for the various fields
+		 Map<String,Analyzer> analyzerPerField = new HashMap<String,Analyzer>();
+		 analyzerPerField.put("HashTags", whiteSpaceAnalyzer);
+		 
+		 PerFieldAnalyzerWrapper aWrapper =
+		   new PerFieldAnalyzerWrapper(analyzer, analyzerPerField);
+		 *
+		 */
+		 //awrapper could replace analyzer in the following
+		IndexWriterConfig indexConfig = 
 			new IndexWriterConfig(Version.LUCENE_40, analyzer);
 		
 		IndexWriter w = null;
 		
+		
 		// initialize index
 		try {
-			w = new IndexWriter(tweetIndex, config);
+			w = new IndexWriter(tweetIndex, indexConfig);
+			
 
 			// add the tweets to the Lucene index 
 			parseTweets(w, inputTweetsFile);
@@ -129,8 +206,9 @@ public class QueryProcessor {
 	private HashMap<String, Query> processQueries() {
 		
 		ArrayList<QueryXml> rawQueries = null;
-		QueryParser parser = 
-				new QueryParser(Version.LUCENE_40, "tweet" , analyzer);
+		//QueryParser parser = new QueryParser(Version.LUCENE_40, "tweet" , analyzer);
+		
+		MultiFieldQueryParser parser = new MultiFieldQueryParser(Version.LUCENE_4_8_0, new String[] {"tweet", "Hashtags"}, analyzer);
 		HashMap<String, Query> queryMap = new HashMap<String, Query>(); 
 		
 		try {
@@ -153,11 +231,17 @@ public class QueryProcessor {
 		
 		return queryMap;
 	}
-
+/**
+ * Scores using TF-IDF, relevance feedback, and minimizes over Hashtag indexing + TF-IDF indexing
+ */
 	private void getResults() {
 		IndexReader reader = null;	
+		IndexReader hashtagReader = null;
 		try {
 			reader = DirectoryReader.open(index);
+			if(useHashtagScoring){
+			hashtagReader = DirectoryReader.open(hashtagIndex);
+			}
 		} catch (IOException e) {
 			System.out.println("Error getting results");
 			e.printStackTrace();
@@ -165,7 +249,12 @@ public class QueryProcessor {
 		
 		IndexSearcher searcher = new IndexSearcher(reader);
 		
-		OutputBuilder outputBuilder = new OutputBuilder(resultsFile);
+		IndexSearcher hashtagSearcher = null;  // so compiler wont complain
+		if(useHashtagScoring){
+			hashtagSearcher = new IndexSearcher(hashtagReader);
+		}
+		
+ 		OutputBuilder outputBuilder = new OutputBuilder(resultsFile);
 		
 		for(String qId : queries.keySet()) {
 			TopScoreDocCollector collector = TopScoreDocCollector.create(NUM_HITS, true);
@@ -178,12 +267,98 @@ public class QueryProcessor {
 			} 
 			
 			ScoreDoc[] hits = collector.topDocs().scoreDocs;
-			outputBuilder.resetRank();
+			
+			ScoreDoc[] hashtagHits = null; // so compiler wont complain
+			
+			if(useHashtagScoring){
 
+				TopScoreDocCollector hashtagCollector = TopScoreDocCollector.create(NUM_HITS, true);
+				
+				try {					
+					hashtagSearcher.search(queries.get(qId), hashtagCollector);
+				} catch (IOException e) {
+					System.out.println("Error getting results");
+					e.printStackTrace();
+				} 
+				hashtagHits = hashtagCollector.topDocs().scoreDocs;
+			}
+			
+			outputBuilder.resetRank();
+			
+			
+		
+			//Re-scores hits using relevance feedback
 			if(useRelevanceFeedback){
 				hits = evaluateQueryWithRelevanceFeedback(queries.get(qId), searcher, hits, collector);
 			}
-
+			
+			if(useHashtagScoring){								
+	
+			// maps document id to a rank, this will later be used to create a list of IDandScore
+			Map<String, Float> scoreMapping = new HashMap<>(1500); // so we have enough size in our table
+						
+			// comment out to test hashtags only
+			for(ScoreDoc hit: hits) {
+				
+				Document d = null;
+				
+				try {
+					d = searcher.doc(hit.doc);
+				} catch (IOException e) {
+					System.out.println("Error getting results");
+					e.printStackTrace();
+				}
+				String id = d.get("id");
+				scoreMapping.put(id, hit.score);
+				
+				
+			}
+		
+			for(ScoreDoc hashtagHit: hashtagHits) {
+				
+				Document d = null;
+				
+				try {
+					d = hashtagSearcher.doc(hashtagHit.doc);
+					
+				} catch (IOException e) {
+					System.out.println("Error getting results");
+					e.printStackTrace();
+				}
+				String id = d.get("id");
+				
+				if(scoreMapping.containsKey(id)){
+					Float hitScore = scoreMapping.get(id);
+					scoreMapping.put(id, hitScore + hashtagHit.score);
+					
+				}
+				else{
+					scoreMapping.put(id, hashtagHit.score);
+				}
+			}
+			
+			List<IDandScore> ranking = new ArrayList<>();
+			
+			for(String key : scoreMapping.keySet()){									
+				ranking.add(new IDandScore(key, scoreMapping.get(key)));					
+			}		
+			ranking.sort(new Comparator<IDandScore>(){
+			@Override
+			   public int compare(final IDandScore a, final IDandScore b) {
+			    return (-1) * a.score.compareTo(b.score);
+			     }
+			});
+		
+			
+			int limit = Integer.min(ranking.size(), 1000);						
+			for(int i = 0; i < limit; i++){
+					
+				outputBuilder.add(qId, ranking.get(i).id, ranking.get(i).score);			
+			
+			}
+			}
+			else{ // if we are not using hashtag scoring
+			
 			for(ScoreDoc hit: hits) {
 				Document d = null;
 				
@@ -197,13 +372,14 @@ public class QueryProcessor {
 				String id = d.get("id");
 				outputBuilder.add(qId, id, hit.score);
 			}
+			}
 		}
 		
 		outputBuilder.close();
 	}
 	
 	/**
-	 * 
+	 * Parses Tweets from the input file
 	 * @param writer
 	 * @param fileName
 	 * @throws IOException
@@ -225,6 +401,72 @@ public class QueryProcessor {
 			try {
 				String[] idAndMessage = tweet.split("\t");
 				doc.add(new Field("tweet", idAndMessage[1], TYPE_STORED));
+				doc.add(new StringField("id", idAndMessage[0], Store.YES));
+			/*	
+				String hashtags = "";
+				
+				String[] tweetWords = idAndMessage[1].split(" ");
+				
+				for(int i = 0; i < tweetWords.length;i++){
+					if(tweetWords[i].contains("#")){
+						String tweetword = tweetWords[i];
+						tweetword = tweetWords[i].replace("#", "");
+						hashtags += tweetword + " ";
+					}
+				}
+				//Hashtags could be separated by a white space analyzer (standard instead though)
+				Field hashtagField = new Field("Hashtags", hashtags, TYPE_HASHTAG);
+				hashtagField.setBoost(hashtagScoreCoefficient);
+				doc.add(hashtagField);
+			*/
+				writer.addDocument(doc);
+
+			} catch(Exception e) {
+				System.out.println(tweet);
+			}
+		}
+		
+		in.close();
+	}
+	
+	/**
+	 * Parses Hashtags from the input file
+	 * @param writer
+	 * @param fileName
+	 * @throws IOException
+	 */
+	private void parseHashtags(IndexWriter writer, 
+							 String fileName) 
+							 throws IOException {
+
+		BufferedReader in = new BufferedReader(
+							new FileReader(
+							new File(fileName)));
+	    String tweet;
+
+	    // continuously parse tweets
+		while((tweet = in.readLine()) != null){
+			
+			// add the tweet to the writer
+			Document doc = new Document();
+			try {
+				String[] idAndMessage = tweet.split("\t");
+				
+				String hashtags = "";
+				
+				String[] tweetWords = idAndMessage[1].split(" ");
+				
+				for(int i = 0; i < tweetWords.length;i++){
+					if(tweetWords[i].contains("#")){
+						String tweetword = tweetWords[i];
+						tweetword = tweetWords[i].replace("#", "");
+						hashtags += tweetword + " ";
+					}
+				}
+				//Hashtags could be separated by a white space analyzer (standard instead though)
+				Field hashtagField = new Field("Hashtags", hashtags, TYPE_HASHTAG);
+				hashtagField.setBoost(hashtagScoreCoefficient);
+				doc.add(hashtagField);
 				doc.add(new StringField("id", idAndMessage[0], Store.YES));
 				writer.addDocument(doc);
 
@@ -367,8 +609,8 @@ public class QueryProcessor {
 		}
 		
 		//RealVector queryVector = toRealVector(queryTermMap);
-		
-		for(int i = 0; i < RELEVANT_DOCUMENTS_CONSIDERED; i++)/*for(ScoreDoc hit: firstResults)*/ {		
+		int limit = Integer.min(RELEVANT_DOCUMENTS_CONSIDERED, firstResults.length);
+		for(int i = 0; i < limit; i++)/*for(ScoreDoc hit: firstResults)*/ {		
 			try {
 				
 				ScoreDoc goodHit = firstResults[i];
@@ -407,7 +649,7 @@ public class QueryProcessor {
 		String queryString = "";
 		for(String key: queryTermMap.keySet()){
 			int frequency = 0;
-			frequency = (int) Math.max(0, queryTermMap.get(key)); //I think casting as an int will round
+			frequency = (int) Double.max(0, queryTermMap.get(key)); //I think casting as an int will round
 			for(int i = 0; i < frequency; i++){
 				queryString += key + " ";
 			}			
