@@ -43,6 +43,11 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
+/*
+ * This is the powerhouse class of this assignment. It builds the index,
+ * parses and scores the queries, and searching for results and saves the
+ * results to a file the trec_eval file can parse.
+ */
 @SuppressWarnings("deprecation")
 public class QueryProcessor {
 
@@ -56,19 +61,24 @@ public class QueryProcessor {
 	private String vocabFile;
 	private String resultsFile;
 
-	// 
+	// Lucene constructs used throughout the three steps
 	private Directory index;
 	private StandardAnalyzer analyzer;
 	private HashMap<String, Query> queries;
 
-	private boolean useRelevanceFeedback = true;
-	
+	// Whether or not to use the relevance feedback system
+	private boolean useRelevanceFeedback;	
+
+	//Number of relevant documents used for feedback
+	private final int RELEVANT_DOCUMENTS_CONSIDERED = 10;
+
+	// The coefficients used in the relevance feedback system
 	private double originalQueryCoefficient = 1.0;
 	private double relevantQueryCoefficient = 5.5;
 	private double irrelevantQueryCoefficient = 0;
 	
 	
-	/* Indexed, tokenized, stored, Term-Vectors */
+	// Indexed, tokenized, stored, Term-Vectors
 	public static final FieldType TYPE_STORED = new FieldType();
 
     static {
@@ -77,22 +87,42 @@ public class QueryProcessor {
 		 TYPE_STORED.setStored(true);
 		 TYPE_STORED.setStoreTermVectors(true);
 		 TYPE_STORED.setStoreTermVectorPositions(true);
-		 TYPE_STORED.freeze(); 	// not sure what this does
+		 TYPE_STORED.freeze();
     }
-		
-	private final int RELEVANT_DOCUMENTS_CONSIDERED = 10;
+	
+	/* Constructor that takes many arguments from the runner.
+	 * The first four are file names for input and output
+	 * The last two deal with the relevance feedback system
+	 */
 	public QueryProcessor(String inputTweetsFile, 
 						  String inputQueriesFile,
 						  String vocabFile,
-						  String resultsFile) {
+						  String resultsFile,
+						  boolean useRelevanceFeedback,
+						  Double[] relevanceCoefficients) {
 		this.inputTweetsFile = inputTweetsFile;
 		this.inputQueriesFile = inputQueriesFile;
 		this.vocabFile = vocabFile;
 		this.resultsFile = resultsFile;
 
 		analyzer = new StandardAnalyzer(Version.LUCENE_40);
+
+		//Set any relevance feedback parameters sent from the command line
+		this.useRelevanceFeedback = useRelevanceFeedback;
+		if(relevanceCoefficients[0] != null) {
+			originalQueryCoefficient = relevanceCoefficients[0];
+		}
+
+		if(relevanceCoefficients[1] != null) {
+			relevantQueryCoefficient = relevanceCoefficients[1];
+		}
+
+		if(relevanceCoefficients[2] != null) {
+			irrelevantQueryCoefficient = relevanceCoefficients[2];
+		}
 	}
 
+	// Main method that calls methods in the correct order
 	public void go() {
 		index = buildIndex();
 		analyzeIndex();
@@ -100,6 +130,8 @@ public class QueryProcessor {
 		getResults();
 	}
 
+	/* Processes the input documents and builds the index
+	 */
 	private Directory buildIndex() {
 		Directory tweetIndex = new RAMDirectory();
 		
@@ -126,6 +158,9 @@ public class QueryProcessor {
 		return tweetIndex;
 	}
 
+	/* Processes the queries from XML and places them in a map with their
+	 * ID's.
+	 */
 	private HashMap<String, Query> processQueries() {
 		
 		ArrayList<QueryXml> rawQueries = null;
@@ -154,6 +189,9 @@ public class QueryProcessor {
 		return queryMap;
 	}
 
+	/* Scores the queries and searches for the matched for each query.
+	 * This method also uses the relevance feedback, if it is enabled.
+	 */
 	private void getResults() {
 		IndexReader reader = null;	
 		try {
@@ -202,11 +240,8 @@ public class QueryProcessor {
 		outputBuilder.close();
 	}
 	
-	/**
-	 * 
-	 * @param writer
-	 * @param fileName
-	 * @throws IOException
+	/*
+	 * Parses the tweet documents from the tweet file
 	 */
 	private void parseTweets(IndexWriter writer, 
 							 String fileName) 
@@ -236,10 +271,8 @@ public class QueryProcessor {
 		in.close();
 	}
 	
-	/**
-	 * 
-	 * @param fileName
-	 * @throws IOException 
+	/*
+	 * Gets the queries from the XML in the query file
 	 */
 	private ArrayList<QueryXml> 
 		retrieveQueriesFromTextFile(String fileName) throws IOException {
@@ -289,6 +322,9 @@ public class QueryProcessor {
 		return queries;
 	}
 
+	/* This gets vocabulary data out of the index and saves them to the 
+	 * the vocabulary output file.
+	 */
 	private void analyzeIndex() {
 		IndexReader reader = null;
 
@@ -347,11 +383,15 @@ public class QueryProcessor {
 	}
 
 	
-	private ScoreDoc[] evaluateQueryWithRelevanceFeedback(Query q, IndexSearcher searcher, ScoreDoc[] firstResults, TopScoreDocCollector collector){
+	private ScoreDoc[] evaluateQueryWithRelevanceFeedback(Query q, 
+		IndexSearcher searcher, ScoreDoc[] firstResults, 
+		TopScoreDocCollector collector){
 		
 		IndexReader reader = searcher.getIndexReader();
 		
-		QueryParser parser = new QueryParser(Version.LUCENE_40, "tweet" , analyzer);
+		QueryParser parser = new QueryParser(Version.LUCENE_40, 
+											 "tweet", 
+											 analyzer);
 		
 		// adds the query terms to our existing set of terms 
 		// (this helps us manage our vector lengths)
@@ -366,35 +406,33 @@ public class QueryProcessor {
 			queryTermMap.put(t.toString(), originalQueryCoefficient*(1.00) );
 		}
 		
-		//RealVector queryVector = toRealVector(queryTermMap);
-		
-		for(int i = 0; i < RELEVANT_DOCUMENTS_CONSIDERED; i++)/*for(ScoreDoc hit: firstResults)*/ {		
+		for(int i = 0; i < RELEVANT_DOCUMENTS_CONSIDERED; i++) {		
 			try {
-				
 				ScoreDoc goodHit = firstResults[i];
 				ScoreDoc badHit = firstResults[firstResults.length - i - 1];
 				
-
 		        relevantVector = getTermFrequencies(reader, goodHit.doc);				
-				notRelevantVector = getTermFrequencies(reader, badHit.doc);
-				
-				// Alternatively,the following could be used 
-				//Directory directory = createIndex(searcher.doc(goodHit.doc));
-				//IndexReader readerForHits = DirectoryReader.open(directory); 
-				//relevantVector = getTermFrequencies(readerForHits, 0);
-				
+				notRelevantVector = getTermFrequencies(reader, badHit.doc);		
 				
 				for(String key: relevantVector.keySet()){
 					if(!queryTermMap.containsKey(key)){
 						queryTermMap.put(key, 0.00);
 					}
-					queryTermMap.put(key, queryTermMap.get(key) + relevantQueryCoefficient*(relevantVector.get(key) / ((double) RELEVANT_DOCUMENTS_CONSIDERED)));
+					queryTermMap.put(key, 
+						queryTermMap.get(key) + 
+						relevantQueryCoefficient *
+					  	(relevantVector.get(key) / 
+					  	((double) RELEVANT_DOCUMENTS_CONSIDERED)));
 				}
 				for(String key: notRelevantVector.keySet()){
 					if(!queryTermMap.containsKey(key)){
 						queryTermMap.put(key, 0.00);
 					}
-					queryTermMap.put(key, queryTermMap.get(key) - irrelevantQueryCoefficient*(notRelevantVector.get(key) / ((double) RELEVANT_DOCUMENTS_CONSIDERED)));
+					queryTermMap.put(key, 
+						queryTermMap.get(key) - 
+						irrelevantQueryCoefficient *
+						(notRelevantVector.get(key) / 
+						((double) RELEVANT_DOCUMENTS_CONSIDERED)));
 				}
 				
 				
@@ -404,18 +442,21 @@ public class QueryProcessor {
 			} 
 			
 		}
+
 		String queryString = "";
+
 		for(String key: queryTermMap.keySet()){
 			int frequency = 0;
-			frequency = (int) Math.max(0, queryTermMap.get(key)); //I think casting as an int will round
+			frequency = (int) Math.max(0, queryTermMap.get(key));
+
 			for(int i = 0; i < frequency; i++){
 				queryString += key + " ";
 			}			
 		}
+
 		TopScoreDocCollector newCollector = null;
+
 		try {
-			
-			
 			Query updatedQuery = parser.parse(queryString);
 			newCollector = TopScoreDocCollector.create(NUM_HITS, true);
 			searcher.search(updatedQuery, newCollector);
@@ -433,12 +474,11 @@ public class QueryProcessor {
 	}
 	
 	/**
-	 * Method used for alternative creation of new queries for relevance feedback
-	 * @param d1
-	 * @return
-	 * @throws IOException
+	 * Method used for alternative creation of new queries for relevance 
+	 * feedback
 	 */
 	 Directory createIndex(Document d1) throws IOException {
+
 	        Directory directory = new RAMDirectory();
 	        Analyzer analyzer = new SimpleAnalyzer(Version.LUCENE_40);
 	        IndexWriterConfig iwc = new IndexWriterConfig(Version.LUCENE_40,
@@ -451,17 +491,19 @@ public class QueryProcessor {
 	 
 	 Map<String, Double> getTermFrequencies(IndexReader reader, int docId)
 	            throws IOException {
+
 	        Terms vector = reader.getTermVector(docId, "tweet");
 	        TermsEnum termsEnum = null;
 	        termsEnum = vector.iterator(termsEnum);
 	        Map<String, Double> frequencies = new HashMap<>();
 	        BytesRef text = null;
+
 	        while ((text = termsEnum.next()) != null) {
 	            String term = text.utf8ToString();
 	            int freq = (int) termsEnum.totalTermFreq();
 	            frequencies.put(term, (double) freq);
-	         
 	        }
+	        
 	        return frequencies;
 	    }
 	

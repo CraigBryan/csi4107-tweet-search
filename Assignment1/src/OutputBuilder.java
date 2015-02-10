@@ -4,7 +4,10 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
 
-
+/*
+ * This is a utility class used to write both the results and vocabulary results
+ * to files.
+ */
 public class OutputBuilder {
 
     BufferedWriter writer;

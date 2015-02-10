@@ -1,11 +1,16 @@
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
+import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
+import java.util.Arrays;
 
+/* This class runs the tweet searching with the input tweets and 
+ * the queries. It takes a few command line arguments.
+ */
 public class Assignment1Runner {
     
     public final String DATA_FOLDER = "res/";
@@ -18,68 +23,105 @@ public class Assignment1Runner {
     public final String EVALUATION_RESULT_FILE = "eval_results.txt";
     public final String TREC_ARGUMENTS = "-o";
 
-    public Assignment1Runner() {
-    	//Empty
+    private boolean useRelevanceFeedback;
+    private static boolean noEval;
+    private Double oQCoef;
+    private Double rQCoef;
+    private Double iQCoef;
+
+    public Assignment1Runner(String[] args) {
+    	parseCommandLineArguments(args);
     }
 
+    // Does non-evaluation tasks (building the index, parsing queries, and
+    // searching fo results)
     public void indexAndSearch() {
+    	Double[] relevanceArray = new Double[3];
+    	relevanceArray[0] = oQCoef;
+    	relevanceArray[1] = rQCoef;
+    	relevanceArray[2] = iQCoef;
     	QueryProcessor q = new QueryProcessor(DATA_FOLDER + INPUT_FILE, 
     										  DATA_FOLDER + QUERIES_FILE,
                                               DATA_FOLDER + VOCAB_OUTPUT_FILE, 
-    										  DATA_FOLDER + OUTPUT_FILE);
+    										  DATA_FOLDER + OUTPUT_FILE,
+                                              useRelevanceFeedback,
+                                              relevanceArray);
     	q.go();
     }
 
+    // Compiles and uses the trec_eval script to evaluate the results
     public void evaluate() {
         compileTrecEval();
         runTrecEval();
     }
 
-    public static void main(String args[]) {
-        Assignment1Runner runner = new Assignment1Runner();
+    public static void main(String[] args) {
+        Assignment1Runner runner = new Assignment1Runner(args);
 
         runner.indexAndSearch();
-        runner.evaluate();
+
+        if(!noEval) runner.evaluate();
+        
+        System.out.println("Done!");
     }
 
     private void compileTrecEval() {
+        
+        //Skips compilation if already compiled
+        File f = new File(LIB_FOLDER + "trec_eval.8.1/trec_eval");
+        if(f.exists()) {
+            return;
+        }
+
     	Runtime rt = Runtime.getRuntime();
     	Process pr;
     	try {
     		pr = rt.exec("make -C " + LIB_FOLDER + "trec_eval.8.1");
     		int result = pr.waitFor();
     		
-    		if (result != 0) throw new IOException("trec_eval exited with exit code" + String.valueOf(result));
+    		if (result != 0) throw new IOException("trec_eval exited with exit code" 
+                + String.valueOf(result));
     		
-    	} catch(IOException e) {
-    		System.out.println("IOException during compiling");
-    		e.printStackTrace();
-    	} catch(InterruptedException e) {
-    		System.out.println("InterruptedException during compiling");
-    		e.printStackTrace();
-    	}
+    	} catch(IOException | InterruptedException e) {
+    		System.out.println("Trec_eval could not be compiled. " +
+                "The result files will still be generated.\n" + 
+                "Evaluation will need to be done manually, sorry.");
+    	} 
     }
     
     private void runTrecEval() {
     	Runtime rt = Runtime.getRuntime();
     	Process pr;
     	try {
-    		pr = rt.exec("./" + LIB_FOLDER + "trec_eval.8.1/trec_eval " + TREC_ARGUMENTS + " " + DATA_FOLDER + RELEVANCE_FEEDBACK_FILE + " " + DATA_FOLDER + OUTPUT_FILE);
+            //The kinda complex trec_eval command line call
+    		pr = rt.exec("./" + 
+                         LIB_FOLDER + 
+                         "trec_eval.8.1/trec_eval " + 
+                         TREC_ARGUMENTS + 
+                         " " + 
+                         DATA_FOLDER + 
+                         RELEVANCE_FEEDBACK_FILE + 
+                         " " + 
+                         DATA_FOLDER + 
+                         OUTPUT_FILE);
     		
-    		saveResultToFile(DATA_FOLDER + EVALUATION_RESULT_FILE, pr.getInputStream());
+    		saveResultToFile(DATA_FOLDER + 
+                             EVALUATION_RESULT_FILE, 
+                             pr.getInputStream());
             
     		int result = pr.waitFor();
-    		if (result != 0) throw new IOException("trec_eval exited with exit code " + String.valueOf(result));
+    		if (result != 0) 
+                throw new IOException("trec_eval exited with exit code " + 
+                                      String.valueOf(result));
     		
-    	} catch(IOException e) {
-    		System.out.println("IOException during trec_eval");
-    		e.printStackTrace();
-    	} catch(InterruptedException e) {
-    		System.out.println("InterruptedException during trec_eval");
-    		e.printStackTrace();
+    	} catch(IOException | InterruptedException e) {
+    		System.out.println("Trec_eval could not be run. " + 
+                "Result files will still be generated.\n" + 
+                "Evaluation will need to be done manually, sorry.");
     	}
     }
-    
+        
+    // Saves the eval results to file
     private void saveResultToFile(String filename, InputStream inputStream) {
     	
     	BufferedWriter output = null;
@@ -103,5 +145,102 @@ public class Assignment1Runner {
         } finally {
         	try{ output.close(); } catch (IOException e) {}
         }
+    }
+
+    // Parses any command line arguments
+    private void parseCommandLineArguments(String[] args) {
+        
+        //Prints a help message and exits
+        if(Arrays.asList(args).contains("-h")) {
+            printHelp();
+            System.exit(1);
+        }
+
+        //Relevance feedback option
+        if(Arrays.asList(args).contains("-r")) {
+            useRelevanceFeedback = true;
+        } else {
+            useRelevanceFeedback = false;
+        }
+
+        //Relevance feedback coefficients
+        if(useRelevanceFeedback) {
+            int index = Arrays.asList(args).indexOf("-oQCoef");
+            if(index != -1) {
+                try {
+                    oQCoef = Double.valueOf(args[index + 1]);
+                } catch(NumberFormatException | 
+                    ArrayIndexOutOfBoundsException e) {
+                    System.out.println("Improper value set for oQCoef " +
+                        "please a number (double) value as the argument " +
+                        "after -oQcoef. Default originalQueryCoefficient " +
+                        "being used for relevance feedback");
+                    oQCoef = null; 
+                    System.exit(0);
+                }
+            }
+
+            index = Arrays.asList(args).indexOf("-rQCoef");
+            if(index != -1) {
+                try {
+                    rQCoef = Double.valueOf(args[index + 1]);
+                } catch(NumberFormatException | 
+                    ArrayIndexOutOfBoundsException e) {
+                    System.out.println("Improper value set for rQCoef " +
+                        "please a number (double) value as the argument " +
+                        "after -rQcoef. Default relevantQueryCoefficient " +
+                        "being used for relevance feedback");
+                    rQCoef = null; 
+                    System.exit(0);
+                }
+            }
+
+            index = Arrays.asList(args).indexOf("-iQCoef");
+            if(Arrays.asList(args).indexOf("-iQCoef") != -1) {
+                try {
+                    iQCoef = Double.valueOf(args[index + 1]);
+                } catch(NumberFormatException | 
+                    ArrayIndexOutOfBoundsException e) {
+                    System.out.println("Improper value set for iQCoef " +
+                        "please a number (double) value as the argument " +
+                        "after -iQcoef. Default irrelevantQueryCoefficient " +
+                        "being used for relevance feedback");
+                    iQCoef = null; 
+                    System.exit(0);
+                }
+            }
+        }
+
+        if(Arrays.asList(args).contains("-n")) {
+            noEval = true;
+        } else {
+            noEval = false;
+        }
+    }
+
+    // Help command line output
+    private void printHelp() {
+        System.out.println("This is the command line interface. The " +
+            "command line options are below:\n " +
+            "\t-h - prints this message\n" + 
+            "\t-r - use relevance feedback\n" +
+            "\t-n - do not perform evaluation (creates " + 
+            "results and vocabulary file only\n" +
+            "\t-oQCoef VAL - sets the originalQueryCoefficient to val\n" +
+            "\t-rQCoef VAL - sets the relevantQueryCoefficient to val\n" +
+            "\t-iQCoef VAL - sets the irrelevantQueryCoefficient to val\n\n" +
+            "There are a few required input files. They need to go in the " +
+            "/res folder. The files required there are as follows:\n" +
+            "\tinput_tweets.txt - the input tweets to be searched\n" +
+            "\ttest_queries.txt - the queries to be performed\n" +
+            "\tTrec_microblog11-qrels.txt - the query relevance answer file. " +
+            "\tTHESE ARE REQUIRED FOR EVALUATION\n\n" +
+            "Outputs appear in the /res folder. The following files will " + 
+            "be created there\n" + 
+            "\tvocabulary.txt - Data about the vocabulary used (number of " +
+            "terms and 100 random terms from the vocabulary\n" +
+            "\tresults.txt - The searching results. 1000 documents for " + 
+            "each query\n\teval_results.txt - EVALUATION ONLY. This file " +
+            "contains the results of running trec_eval on the results.");
     }
 }
