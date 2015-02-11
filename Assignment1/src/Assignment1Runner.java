@@ -27,6 +27,8 @@ public class Assignment1Runner {
     private Double oQCoef;
     private Double rQCoef;
     private Double iQCoef;
+    private boolean useHashtagScoring;
+    private Float htCoef;
     private static boolean noEval;
     private QueryProcessor.AnalyzerChoice ac;
 
@@ -47,6 +49,8 @@ public class Assignment1Runner {
     										  DATA_FOLDER + OUTPUT_FILE,
                                               useRelevanceFeedback,
                                               relevanceArray,
+                                              useHashtagScoring,
+                                              htCoef,
                                               ac);
     	q.go();
     }
@@ -213,13 +217,39 @@ public class Assignment1Runner {
             }
         }
 
+        //Hashtag scoring option
+        if(Arrays.asList(args).contains("-t")) {
+            useHashtagScoring = true;
+        } else {
+        	useHashtagScoring = false;
+        }
+        
+        // Hashtag scoring coefficient 
+        if(useHashtagScoring) {
+            int index = Arrays.asList(args).indexOf("-htCoef");
+            if(index != -1) {
+                try {
+                	htCoef = Float.valueOf(args[index + 1]);
+                } catch(NumberFormatException | 
+                    ArrayIndexOutOfBoundsException e) {
+                    System.out.println("Improper value set for htCoef " +
+                        "please a number (double) value as the argument " +
+                        "after -htCoef. Default hashtagScoreCoefficient " +
+                        "being used for hashtag scoring feedback");
+                    oQCoef = null; 
+                    System.exit(0);
+                }
+            }
+        }
+        
+        //NoEval option
         if(Arrays.asList(args).contains("-n")) {
             noEval = true;
         } else {
             noEval = false;
         }
         
-      //Analyzer options
+        //Analyzer options
         if(Arrays.asList(args).contains("-e")) {
         	ac = QueryProcessor.AnalyzerChoice.ENGLISH;
         } else {
@@ -233,13 +263,15 @@ public class Assignment1Runner {
             "command line options are below:\n " +
             "\t-h - prints this message\n" + 
             "\t-r - use relevance feedback\n" +
+            "\t-t - enable hashtag scoring\n" +
             "\t-n - do not perform evaluation (creates " + 
             "results and vocabulary file only\n" +
             "\t-e - use the EnglishAnalyzer rather than Lucene's " +
             "StandardAnalyzer\n" +
-            "\t-oQCoef VAL - sets the originalQueryCoefficient to val\n" +
-            "\t-rQCoef VAL - sets the relevantQueryCoefficient to val\n" +
-            "\t-iQCoef VAL - sets the irrelevantQueryCoefficient to val\n\n" +
+            "\t-oQCoef VAL - sets the originalQueryCoefficient to VAL\n" +
+            "\t-rQCoef VAL - sets the relevantQueryCoefficient to VAL\n" +
+            "\t-iQCoef VAL - sets the irrelevantQueryCoefficient to VAL\n" +
+            "\t-htCoef VAL - sets the hashtagScoreCoefficient to VAL\n\n" +
             "There are a few required input files. They need to go in the " +
             "/res folder. The files required there are as follows:\n" +
             "\tinput_tweets.txt - the input tweets to be searched\n" +
