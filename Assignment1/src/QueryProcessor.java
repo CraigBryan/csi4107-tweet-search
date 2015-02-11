@@ -76,10 +76,10 @@ public class QueryProcessor {
 	private boolean useHashtagScoring;
 
 	//Number of relevant documents uesed for feedback
-	private final int RELEVANT_DOCUMENTS_CONSIDERED = 10;
+	private int relevant_documents_considered = 5;
 
 	// The coefficients used in the relevance feedback system
-	private double originalQueryCoefficient = 1.0;
+	private double originalQueryCoefficient = 1;
 	private double relevantQueryCoefficient = 5.5;
 	private double irrelevantQueryCoefficient = 0;
 	
@@ -121,6 +121,7 @@ public class QueryProcessor {
 						  String resultsFile,
 						  boolean useRelevanceFeedback,
 						  Double[] relevanceCoefficients,
+						  Integer numRelDocs,
 						  boolean useHashtagScoring,
 						  Float hashtagScoreCoefficient,
 						  AnalyzerChoice ac) {
@@ -147,6 +148,10 @@ public class QueryProcessor {
 
 		if(relevanceCoefficients[2] != null) {
 			irrelevantQueryCoefficient = relevanceCoefficients[2];
+		}
+
+		if(numRelDocs != null) {
+			relevant_documents_considered = numRelDocs;
 		}
 		
 		//Sets the hashtag scoring parameters sent from the command line
@@ -193,7 +198,8 @@ public class QueryProcessor {
 		} finally {
 			try { w.close(); } 
 			catch (IOException | NullPointerException e) { }
-		}
+		}Precision:
+
 
 		return newHashtagIndex;
 	}
@@ -314,8 +320,6 @@ public class QueryProcessor {
 			}
 			
 			outputBuilder.resetRank();
-			
-			
 		
 			//Re-scores hits using relevance feedback
 			if(useRelevanceFeedback) {
@@ -631,7 +635,7 @@ public class QueryProcessor {
 			queryTermMap.put(t.toString(), originalQueryCoefficient*(1.00) );
 		}
 		
-		int limit = Math.min(RELEVANT_DOCUMENTS_CONSIDERED, firstResults.length);
+		int limit = Math.min(relevant_documents_considered, firstResults.length);
 		
 		for(int i = 0; i < limit; i++) {		
 			try {
@@ -649,7 +653,7 @@ public class QueryProcessor {
 						queryTermMap.get(key) + 
 						relevantQueryCoefficient *
 					  	(relevantVector.get(key) / 
-					  	((double) RELEVANT_DOCUMENTS_CONSIDERED)));
+					  	((double) relevant_documents_considered)));
 				}
 				for(String key: notRelevantVector.keySet()){
 					if(!queryTermMap.containsKey(key)){
@@ -659,7 +663,7 @@ public class QueryProcessor {
 						queryTermMap.get(key) - 
 						irrelevantQueryCoefficient *
 						(notRelevantVector.get(key) / 
-						((double) RELEVANT_DOCUMENTS_CONSIDERED)));
+						((double) relevant_documents_considered)));
 				}
 				
 				

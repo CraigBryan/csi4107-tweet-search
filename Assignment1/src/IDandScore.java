@@ -1,4 +1,7 @@
-
+/**
+ * Simple custom sortable object for storing scores with id's.
+ * The objects are stored by score.
+ */
 public class IDandScore implements Comparable<IDandScore> {
 	public String id;
 	public Float score; 

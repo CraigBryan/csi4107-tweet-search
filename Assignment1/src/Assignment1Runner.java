@@ -27,6 +27,7 @@ public class Assignment1Runner {
     private Double oQCoef;
     private Double rQCoef;
     private Double iQCoef;
+    private Integer numR;
     private boolean useHashtagScoring;
     private Float htCoef;
     private static boolean noEval;
@@ -39,7 +40,7 @@ public class Assignment1Runner {
     // Does non-evaluation tasks (building the index, parsing queries, and
     // searching for results)
     public void indexAndSearch() {
-    	Double[] relevanceArray = new Double[3];
+    	Double[] relevanceArray = new Double[4];
     	relevanceArray[0] = oQCoef;
     	relevanceArray[1] = rQCoef;
     	relevanceArray[2] = iQCoef;
@@ -49,6 +50,7 @@ public class Assignment1Runner {
     										  DATA_FOLDER + OUTPUT_FILE,
                                               useRelevanceFeedback,
                                               relevanceArray,
+                                              numR,
                                               useHashtagScoring,
                                               htCoef,
                                               ac);
@@ -91,7 +93,8 @@ public class Assignment1Runner {
     	} catch(IOException | InterruptedException e) {
     		System.out.println("Trec_eval could not be compiled. " +
                 "The result files will still be generated.\n" + 
-                "Evaluation will need to be done manually, sorry.");
+                "Evaluation will need to be done manually, sorry. " +
+                "See res/results.txt for the results.");
     	} 
     }
     
@@ -123,7 +126,8 @@ public class Assignment1Runner {
     	} catch(IOException | InterruptedException e) {
     		System.out.println("Trec_eval could not be run. " + 
                 "Result files will still be generated.\n" + 
-                "Evaluation will need to be done manually, sorry.");
+                "Evaluation will need to be done manually, sorry. " +
+                "See res/results.txt for the results.");
     	}
     }
         
@@ -182,7 +186,6 @@ public class Assignment1Runner {
                         "after -oQcoef. Default originalQueryCoefficient " +
                         "being used for relevance feedback");
                     oQCoef = null; 
-                    System.exit(0);
                 }
             }
 
@@ -197,7 +200,6 @@ public class Assignment1Runner {
                         "after -rQcoef. Default relevantQueryCoefficient " +
                         "being used for relevance feedback");
                     rQCoef = null; 
-                    System.exit(0);
                 }
             }
 
@@ -212,7 +214,20 @@ public class Assignment1Runner {
                         "after -iQcoef. Default irrelevantQueryCoefficient " +
                         "being used for relevance feedback");
                     iQCoef = null; 
-                    System.exit(0);
+                }
+            }
+
+            index = Arrays.asList(args).indexOf("-numR");
+            if(Arrays.asList(args).indexOf("-numR") != -1) {
+                try {
+                    numR = Integer.valueOf(args[index + 1]);
+                } catch(NumberFormatException | 
+                    ArrayIndexOutOfBoundsException e) {
+                    System.out.println("Improper value set for numR " +
+                        "please a number (integer) value as the argument " +
+                        "after -numR. Default irrelevantQueryCoefficient " +
+                        "being used for relevance feedback");
+                    numR = null; 
                 }
             }
         }
@@ -265,12 +280,14 @@ public class Assignment1Runner {
             "\t-r - use relevance feedback\n" +
             "\t-t - enable hashtag scoring\n" +
             "\t-n - do not perform evaluation (creates " + 
-            "results and vocabulary file only\n" +
+            "results and vocabulary file only)\n" +
             "\t-e - use the EnglishAnalyzer rather than Lucene's " +
             "StandardAnalyzer\n" +
             "\t-oQCoef VAL - sets the originalQueryCoefficient to VAL\n" +
             "\t-rQCoef VAL - sets the relevantQueryCoefficient to VAL\n" +
             "\t-iQCoef VAL - sets the irrelevantQueryCoefficient to VAL\n" +
+            "\t-numR VAL - sets the number of relevant documents to consider" +
+            "for relevance feeback\n" + 
             "\t-htCoef VAL - sets the hashtagScoreCoefficient to VAL\n\n" +
             "There are a few required input files. They need to go in the " +
             "/res folder. The files required there are as follows:\n" +
