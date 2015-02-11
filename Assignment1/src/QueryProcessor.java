@@ -73,7 +73,7 @@ public class QueryProcessor {
 	private boolean useRelevanceFeedback;
 	
 	// Whether or not to use hashtag scoring
-	private boolean useHashtagScoring = false;
+	private boolean useHashtagScoring;
 
 	//Number of relevant documents uesed for feedback
 	private final int RELEVANT_DOCUMENTS_CONSIDERED = 10;
@@ -84,7 +84,7 @@ public class QueryProcessor {
 	private double irrelevantQueryCoefficient = 0;
 	
 	// The coefficient used for hashtag-based scoring
-	private float hashtagScoreCoefficient = 1.00f;
+	private float hashtagScoreCoefficient = 0.1f;
 	
 	// Indexed, tokenized, stored, Term-Vectors
 	public static final FieldType TYPE_STORED = new FieldType();
